@@ -85,6 +85,6 @@ directly, like this:
 
 # Contributors
 
-* Nicole Vovrova
+* Nicole Vavrova
 * Nigel Gott
 * Daniel Fortunov
