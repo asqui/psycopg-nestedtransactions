@@ -77,3 +77,14 @@ directly, like this:
  
     self tearDown():
         self.txn.rollback()  # All test changes are rolled back
+
+# Development
+
+1. Install Postgres
+
+
+# Contributors
+
+* Nicole Vovrova
+* Nigel Gott
+* Daniel Fortunov
