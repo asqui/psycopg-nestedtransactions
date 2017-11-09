@@ -88,6 +88,12 @@ Development
 
 1. Install Postgres: See www.postgresql.org
 On Windows, you will need to add the Postgres bin/ directory to your PATH. (e.g. C:/Program Files/PostgreSQL/10/bin)
+On Ubuntu:
+```
+sudo apt-get install postgresql postgresql-contrib
+sudo ln -s /usr/lib/postgresql/9.6/bin/initdb /usr/bin/initdb
+```
+
 1. Create a Virtual Environment
 1. Install dependencies
 
