@@ -67,11 +67,24 @@ def test_changes_discarded_on_exception(cxn):
 
 
 def test_forced_discard_changes_discarded_on_successful_exit(cxn):
-    pass
+    cur = cxn.cursor()
+    with Transaction(cxn, force_disard = True):
+        cur.execute("INSERT INTO tmp_table VALUES ('test_forced_discard_changes_discarded_on_successful_exit')")
+    cur.execute("SELECT * FROM tmp_table WHERE Id = 'test_forced_discard_changes_discarded_on_successful_exit'")
+    rows = cur.fetchall()
+    assert len(rows) == 0
 
 
 def test_forced_discard_changes_discarded_on_exception(cxn):
-    pass
+    cur = cxn.cursor()
+    with pytest.raises(ExpectedException):
+        with Transaction(cxn, force_disard=True):
+            cur.execute("INSERT INTO tmp_table VALUES ('test_forced_discard_changes_discarded_on_exception')")
+            raise ExpectedException('The insert should be discarded here regardless of any exceptions thrown')
+    cur.execute("SELECT * FROM tmp_table WHERE Id = 'test_forced_discard_changes_discarded_on_exception'")
+    rows = cur.fetchall()
+    assert len(rows) == 0
+
 
 
 def test_inner_and_outer_changes_persisted_on_successful_exit(cxn):
