@@ -4,4 +4,4 @@ python:
   - "3.6"
 install:
   - "pip install -e ."
-script: coverage run -m pytest
+script: pytest
