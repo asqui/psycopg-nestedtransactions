@@ -38,13 +38,11 @@ def test_no_open_transactions_on_exception(cxn):
     cxn.commit()
 
     assert_not_in_transaction(cxn)
-    try:
+    with pytest.raises(ExpectedException):
         with Transaction(cxn):
             cxn.cursor().execute('SELECT 1')
             assert_in_transaction(cxn)
             raise ExpectedException('This rolls back the transaction')
-    except ExpectedException:
-        pass
     assert_not_in_transaction(cxn)
 
 
@@ -59,23 +57,34 @@ def test_changes_applied_on_successful_exit(cxn):
 
 def test_changes_discarded_on_exception(cxn):
     cur = cxn.cursor()
-    try:
+    with pytest.raises(ExpectedException):
         with Transaction(cxn):
             cur.execute("INSERT INTO tmp_table VALUES ('test_changes_discarded_on_exception')")
             raise ExpectedException('This discards the insert')
-    except ExpectedException:
-        pass
     cur.execute("SELECT * FROM tmp_table WHERE Id = 'test_changes_discarded_on_exception'")
     rows = cur.fetchall()
     assert len(rows) == 0
 
 
 def test_forced_discard_changes_discarded_on_successful_exit(cxn):
-    pass
+    cur = cxn.cursor()
+    with Transaction(cxn, force_disard = True):
+        cur.execute("INSERT INTO tmp_table VALUES ('test_forced_discard_changes_discarded_on_successful_exit')")
+    cur.execute("SELECT * FROM tmp_table WHERE Id = 'test_forced_discard_changes_discarded_on_successful_exit'")
+    rows = cur.fetchall()
+    assert len(rows) == 0
 
 
 def test_forced_discard_changes_discarded_on_exception(cxn):
-    pass
+    cur = cxn.cursor()
+    with pytest.raises(ExpectedException):
+        with Transaction(cxn, force_disard=True):
+            cur.execute("INSERT INTO tmp_table VALUES ('test_forced_discard_changes_discarded_on_exception')")
+            raise ExpectedException('The insert should be discarded here regardless of any exceptions thrown')
+    cur.execute("SELECT * FROM tmp_table WHERE Id = 'test_forced_discard_changes_discarded_on_exception'")
+    rows = cur.fetchall()
+    assert len(rows) == 0
+
 
 
 def test_inner_and_outer_changes_persisted_on_successful_exit(cxn):
