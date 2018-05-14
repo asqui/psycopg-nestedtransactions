@@ -1,7 +1,4 @@
-from contextlib import ContextDecorator
-
-
-class Transaction(ContextDecorator):
+class Transaction(object):
     def __init__(self, cxn):
         self.cxn = cxn
 
