@@ -86,16 +86,17 @@ directly, like this:
 Development
 -----------
 
-1. Install Postgres: See www.postgresql.org
-On Windows, you will need to add the Postgres bin/ directory to your PATH. (e.g. C:/Program Files/PostgreSQL/10/bin)
+1. Install Postgres: See www.postgresql.org  
+   On Windows, you will need to add the Postgres bin/ directory 
+   to your PATH. (e.g. C:/Program Files/PostgreSQL/10/bin)
 1. Create a Virtual Environment
 1. Install dependencies
 
-    $ bin/pip install -U -e .[test,build]
+       $ bin/pip install -U -e .[test,build]
 
 1. Run the tests. They should all pass.
 
-    $ pytest
+       $ pytest
 
 
 Contributors
