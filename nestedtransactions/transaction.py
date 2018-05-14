@@ -1,7 +1,9 @@
-import traceback
-
+import logging
 from collections import defaultdict
 
+
+_log = logging.getLogger(__name__)
+_log.setLevel(logging.WARN)
 
 class Transaction(object):
     __transaction_stack = defaultdict(list)
@@ -18,18 +20,21 @@ class Transaction(object):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type:
-            traceback.print_exception(exc_type, exc_val, exc_tb)
+        try:
+            if exc_type is not None:
+                self.rollback()
+            elif not self._rolled_back:
+                self.cxn.cursor().execute('RELEASE SAVEPOINT ' + self._savepoint_id)
 
-        if exc_type is not None:
-            self.rollback()
-        elif not self._rolled_back:
-            self.cxn.cursor().execute('RELEASE SAVEPOINT ' + self._savepoint_id)
+            assert self._transaction_stack.pop() == self
 
-        assert self._transaction_stack.pop() == self
-
-        if len(self._transaction_stack) == 0:
-            self.cxn.commit()
+            if len(self._transaction_stack) == 0:
+                self.cxn.commit()
+        except:
+            if exc_type:
+                _log.error('Exception raised when trying to exit Transaction context. '
+                           'Original exception:\n', exc_info=(exc_type, exc_val, exc_tb))
+            raise
 
     def rollback(self):
         if self not in self._transaction_stack:
