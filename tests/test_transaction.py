@@ -6,42 +6,6 @@ from psycopg2.extensions import STATUS_READY, STATUS_IN_TRANSACTION, TRANSACTION
 from nestedtransactions.transaction import Transaction
 
 
-@pytest.fixture(scope='module')
-def db():
-    """Create a fresh database and return an open connection."""
-    with testing.postgresql.Postgresql() as db:
-        yield db
-
-
-@pytest.fixture()
-def cxn(db):
-    """Prepare a test table and return a connection."""
-    cxn = psycopg2.connect(**db.dsn())
-    cur = cxn.cursor()
-    cur.execute("DROP TABLE IF EXISTS tmp_table")
-    cur.execute("CREATE TABLE tmp_table(Id VARCHAR(80))")
-    cxn.commit()
-    cxn.close()
-
-    cxn = psycopg2.connect(**db.dsn())
-    _assert_connection_is_clean(cxn)
-    yield cxn
-    cxn.close()
-
-
-@pytest.fixture()
-def other_cxn(db):
-    cxn = psycopg2.connect(**db.dsn())
-    _assert_connection_is_clean(cxn)
-    yield cxn
-    cxn.close()
-
-
-def _assert_connection_is_clean(cxn):
-    assert cxn.status == STATUS_READY
-    assert cxn.get_transaction_status() == TRANSACTION_STATUS_IDLE
-
-
 def test_no_open_transactions_on_successful_exit(cxn):
     assert_not_in_transaction(cxn)
     with Transaction(cxn):
@@ -234,6 +198,56 @@ def test_transaction_already_in_progress_asserts_on_enter(cxn):
     cxn.cursor().execute("INSERT INTO tmp_table VALUES ('hello')")
     with pytest.raises(AssertionError, message='cxn is already in a transaction; Set cxn.autocommit = True'):
         Transaction(cxn).__enter__()
+
+
+# --- Fixtures and helpers ---
+@pytest.fixture(scope='module')
+def db():
+    """Create a fresh database and prepare a test table."""
+    with testing.postgresql.Postgresql() as db:
+        yield db
+
+
+@pytest.fixture()
+def cxn(db):
+    """Prepare a test table and return a connection."""
+    with _connect(db) as cxn:
+        with cxn.cursor() as cur:
+            cur.execute("DROP TABLE IF EXISTS tmp_table")
+            cur.execute("CREATE TABLE tmp_table(Id VARCHAR(80))")
+
+    with _connect(db) as cxn:
+        yield cxn
+        #_assert_connection_is_clean(cxn)
+
+
+@pytest.fixture()
+def other_cxn(db):
+    with _connect(db) as cxn:
+        yield cxn
+        #_assert_connection_is_clean(cxn)
+
+
+def _connect(db):
+    cxn = psycopg2.connect(**db.dsn())
+    # cxn.autocommit = True
+    _assert_connection_is_clean(cxn)
+    return cxn
+
+
+def _assert_connection_is_clean(cxn):
+    assert cxn.status == STATUS_READY
+    assert cxn.get_transaction_status() == TRANSACTION_STATUS_IDLE
+    # assert cxn.autocommit
+
+
+def assert_rows(cxn, *expected):
+    with cxn:
+        with cxn.cursor() as cur:
+            cur.execute('SELECT * FROM tmp_table')
+            rows = cur.fetchall()
+            assert set(v for (v,) in rows) == set(expected)
+
 
 def assert_in_transaction(cxn):
     assert cxn.status == STATUS_IN_TRANSACTION
