@@ -1,6 +1,8 @@
 psycopg-nestedtransactions
 ==========================
 
+[![Build Status](https://travis-ci.org/asqui/psycopg-nestedtransactions.svg?branch=master)](https://travis-ci.org/asqui/psycopg-nestedtransactions)
+
 Database transaction manager for psycopg2 database connections with seamless support for nested transactions.
  
 Most commonly used as a context manager, but can also be used directly in special circumstances.
