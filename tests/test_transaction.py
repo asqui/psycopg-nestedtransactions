@@ -36,6 +36,13 @@ def test_changes_discarded_on_exception(cxn):
     assert_rows(cxn, set())
 
 
+def test_transaction_stack_dict_does_not_leak(cxn):
+    assert len(Transaction._Transaction__transaction_stack) == 0, 'Pre-condition'
+    with Transaction(cxn):
+        assert len(Transaction._Transaction__transaction_stack) == 1
+    assert len(Transaction._Transaction__transaction_stack) == 0, 'Post-condition'
+
+
 @pytest.mark.skip
 def test_forced_discard_changes_discarded_on_successful_exit(cxn):
     with Transaction(cxn, force_disard = True):

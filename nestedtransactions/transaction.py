@@ -5,6 +5,7 @@ from collections import defaultdict
 _log = logging.getLogger(__name__)
 _log.setLevel(logging.WARN)
 
+
 class Transaction(object):
     __transaction_stack = defaultdict(list)
 
@@ -29,6 +30,7 @@ class Transaction(object):
             assert self._transaction_stack.pop() == self
 
             if len(self._transaction_stack) == 0:
+                del self.__transaction_stack[self.cxn]
                 self.cxn.commit()
         except:
             if exc_type:
