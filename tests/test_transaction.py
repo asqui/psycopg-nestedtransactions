@@ -139,21 +139,6 @@ def test_inner_changes_discarded_on_exception_but_outer_changes_persisted_on_suc
     assert_rows(cxn, {'outer-before', 'outer-after'})
 
 
-def test_explicit_rollback_discards_changes(cxn):
-    with Transaction(cxn) as txn:
-        insert_row(cxn, 'value')
-        txn.rollback()
-    assert_rows(cxn, set())
-
-
-def test_explicit_rollback_repeated_raises(cxn):
-    with Transaction(cxn) as txn:
-        insert_row(cxn, 'value')
-        txn.rollback()
-        with pytest.raises(Exception, match='Transaction already rolled back.'):
-            txn.rollback()
-
-
 def test_explicit_rollback_outside_context_raises(cxn):
     with Transaction(cxn) as txn:
         insert_row(cxn, 'value')
@@ -169,6 +154,30 @@ def test_explicit_rollback_inner_discards_only_inner_changes(cxn):
             inner.rollback()
         insert_row(cxn, 'outer-after')
     assert_rows(cxn, {'outer-before', 'outer-after'})
+
+
+def test_explicit_rollback_discards_changes(cxn):
+    with Transaction(cxn) as txn:
+        insert_row(cxn, 'value')
+        txn.rollback()
+    assert_rows(cxn, set())
+
+
+def test_explicit_rollback_followed_by_exception_inside_context(cxn):
+    with pytest.raises(ExpectedException):
+        with Transaction(cxn) as txn:
+            insert_row(cxn, 'value')
+            txn.rollback()
+            raise ExpectedException()
+    assert_rows(cxn, set())
+
+
+def test_explicit_rollback_repeated_raises(cxn):
+    with Transaction(cxn) as txn:
+        insert_row(cxn, 'value')
+        txn.rollback()
+        with pytest.raises(Exception, match='Transaction already rolled back.'):
+            txn.rollback()
 
 
 def test_explicit_rollback_outer_discards_inner_and_outer_changes(cxn):

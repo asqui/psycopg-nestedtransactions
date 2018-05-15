@@ -33,7 +33,7 @@ class Transaction(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         try:
-            if exc_type is not None:
+            if exc_type is not None and not self._rolled_back:
                 self.rollback()
             elif not self._rolled_back:
                 _execute_and_log(self.cxn, 'RELEASE SAVEPOINT ' + self._savepoint_id)
