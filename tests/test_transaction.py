@@ -10,8 +10,6 @@ def test_no_open_transactions_on_successful_exit(cxn):
     assert_not_in_transaction(cxn)
     with Transaction(cxn):
         assert_in_transaction(cxn)
-        cxn.cursor().execute('SELECT 1')
-        assert_in_transaction(cxn)
     assert_not_in_transaction(cxn)
 
 
@@ -20,156 +18,119 @@ def test_no_open_transactions_on_exception(cxn):
     with pytest.raises(ExpectedException):
         with Transaction(cxn):
             assert_in_transaction(cxn)
-            cxn.cursor().execute('SELECT 1')
-            assert_in_transaction(cxn)
             raise ExpectedException('This rolls back the transaction')
     assert_not_in_transaction(cxn)
 
 
 def test_changes_applied_on_successful_exit(cxn):
-    cur = cxn.cursor()
     with Transaction(cxn):
-        cur.execute("INSERT INTO tmp_table VALUES ('outer')")
-    cur.execute("SELECT * FROM tmp_table WHERE Id = 'outer'")
-    rows = cur.fetchall()
-    assert len(rows) == 1
+        insert_row(cxn, 'value')
+    assert_rows(cxn, {'value'})
 
 
 def test_changes_discarded_on_exception(cxn):
-    cur = cxn.cursor()
     with pytest.raises(ExpectedException):
         with Transaction(cxn):
-            cur.execute("INSERT INTO tmp_table VALUES ('outer')")
+            insert_row(cxn, 'value')
             raise ExpectedException('This discards the insert')
-    cur.execute("SELECT * FROM tmp_table WHERE Id = 'outer'")
-    rows = cur.fetchall()
-    assert len(rows) == 0
+    assert_rows(cxn, set())
 
 
 @pytest.mark.skip
 def test_forced_discard_changes_discarded_on_successful_exit(cxn):
-    cur = cxn.cursor()
     with Transaction(cxn, force_disard = True):
-        cur.execute("INSERT INTO tmp_table VALUES ('outer')")
-    cur.execute("SELECT * FROM tmp_table")
-    rows = cur.fetchall()
-    assert len(rows) == 0
+        insert_row(cxn, 'value')
+    assert_rows(cxn, set())
 
 
 @pytest.mark.skip
 def test_forced_discard_changes_discarded_on_exception(cxn):
-    cur = cxn.cursor()
     with pytest.raises(ExpectedException):
         with Transaction(cxn, force_disard=True):
-            cur.execute("INSERT INTO tmp_table VALUES ('outer')")
+            insert_row(cxn, 'value')
             raise ExpectedException('The insert should be discarded here regardless of any exceptions thrown')
-    cur.execute("SELECT * FROM tmp_table")
-    rows = cur.fetchall()
-    assert len(rows) == 0
+    assert_rows(cxn, set())
 
 
 def test_inner_and_outer_changes_persisted_on_successful_exit(cxn):
-    cur = cxn.cursor()
     with Transaction(cxn):
-        cur.execute("INSERT INTO tmp_table VALUES ('outer-before')")
+        insert_row(cxn, 'outer-before')
         with Transaction(cxn):
-            cur.execute("INSERT INTO tmp_table VALUES ('inner')")
-        cur.execute("INSERT INTO tmp_table VALUES ('outer-after')")
-    cur.execute('SELECT * FROM tmp_table')
-    rows = cur.fetchall()
-    assert len(rows) == 3
+            insert_row(cxn, 'inner')
+        insert_row(cxn, 'outer-after')
+    assert_rows(cxn, {'outer-before', 'inner', 'outer-after'})
 
 
 def test_inner_and_outer_changes_discarded_on_outer_exception(cxn):
-    cur = cxn.cursor()
     with pytest.raises(ExpectedException):
         with Transaction(cxn):
-            cur.execute("INSERT INTO tmp_table VALUES ('outer')")
+            insert_row(cxn, 'outer')
             with Transaction(cxn):
-                cur.execute("INSERT INTO tmp_table VALUES ('inner')")
+                insert_row(cxn, 'inner')
             raise ExpectedException()
-    cur.execute('SELECT * FROM tmp_table')
-    rows = cur.fetchall()
-    assert len(rows) == 0
+    assert_rows(cxn, set())
 
 
 def test_inner_and_outer_changes_discarded_on_unhandled_inner_exception(cxn):
-    cur = cxn.cursor()
     with pytest.raises(ExpectedException):
         with Transaction(cxn):
-            cur.execute("INSERT INTO tmp_table VALUES ('outer')")
+            insert_row(cxn, 'outer')
             with Transaction(cxn):
-                cur.execute("INSERT INTO tmp_table VALUES ('inner')")
+                insert_row(cxn, 'inner')
                 raise ExpectedException()
-    cur.execute('SELECT * FROM tmp_table')
-    rows = cur.fetchall()
-    assert len(rows) == 0
+    assert_rows(cxn, set())
 
 
 def test_inner_changes_discarded_on_exception_but_outer_changes_persisted_on_successful_exit(cxn):
-    cur = cxn.cursor()
     with Transaction(cxn):
-        cur.execute("INSERT INTO tmp_table VALUES ('outer-before')")
+        insert_row(cxn, 'outer-before')
         with pytest.raises(ExpectedException):
             with Transaction(cxn):
-                cur.execute("INSERT INTO tmp_table VALUES ('inner')")
+                insert_row(cxn, 'inner')
                 raise ExpectedException()
-        cur.execute("INSERT INTO tmp_table VALUES ('outer-after')")
-    cur.execute('SELECT * FROM tmp_table')
-    rows = cur.fetchall()
-    assert set(rows) == {('outer-before',), ('outer-after',)}
+        insert_row(cxn, 'outer-after')
+    assert_rows(cxn, {'outer-before', 'outer-after'})
 
 
 def test_explicit_rollback_discards_changes(cxn):
-    cur = cxn.cursor()
     with Transaction(cxn) as txn:
-        cur.execute("INSERT INTO tmp_table VALUES ('outer')")
+        insert_row(cxn, 'value')
         txn.rollback()
-    cur.execute("SELECT * FROM tmp_table")
-    rows = cur.fetchall()
-    assert len(rows) == 0
+    assert_rows(cxn, set())
 
 
 def test_explicit_rollback_repeated_raises(cxn):
-    cur = cxn.cursor()
     with Transaction(cxn) as txn:
-        cur.execute("INSERT INTO tmp_table VALUES ('outer')")
+        insert_row(cxn, 'value')
         txn.rollback()
         with pytest.raises(Exception, match='Transaction already rolled back.'):
             txn.rollback()
 
 
 def test_explicit_rollback_outside_context_raises(cxn):
-    cur = cxn.cursor()
     with Transaction(cxn) as txn:
-        cur.execute("INSERT INTO tmp_table VALUES ('outer')")
+        insert_row(cxn, 'value')
     with pytest.raises(Exception, match='Cannot rollback outside transaction context.'):
         txn.rollback()
 
 
 def test_explicit_rollback_inner_discards_only_inner_changes(cxn):
-    cur = cxn.cursor()
     with Transaction(cxn):
-        cur.execute("INSERT INTO tmp_table VALUES ('outer-before')")
+        insert_row(cxn, 'outer-before')
         with Transaction(cxn) as inner:
-            cur.execute("INSERT INTO tmp_table VALUES ('inner')")
+            insert_row(cxn, 'inner')
             inner.rollback()
-        cur.execute("INSERT INTO tmp_table VALUES ('outer-after')")
-    cur.execute('SELECT * FROM tmp_table')
-    rows = cur.fetchall()
-    assert set(rows) == {('outer-before',), ('outer-after',)}
+        insert_row(cxn, 'outer-after')
+    assert_rows(cxn, {'outer-before', 'outer-after'})
 
 
 def test_explicit_rollback_outer_discards_inner_and_outer_changes(cxn):
-    cur = cxn.cursor()
     with Transaction(cxn) as outer:
-        cur.execute("INSERT INTO tmp_table VALUES ('outer')")
+        insert_row(cxn, 'outer')
         with Transaction(cxn):
-            cur.execute("INSERT INTO tmp_table VALUES ('inner')")
+            insert_row(cxn, 'inner')
         outer.rollback()
-    cur.execute('SELECT * FROM tmp_table')
-    rows = cur.fetchall()
-    assert len(rows) == 0
+    assert_rows(cxn, set())
 
 
 def test_rollback_outer_transaction_while_inner_transaction_is_active(cxn):
@@ -181,21 +142,18 @@ def test_rollback_outer_transaction_while_inner_transaction_is_active(cxn):
 
 def test_transactions_on_multiple_connections_are_independent(cxn, other_cxn):
     with Transaction(cxn) as outer_txn:
+        insert_row(cxn, 'outer')
         with Transaction(other_cxn):
-            cxn.cursor().execute("INSERT INTO tmp_table VALUES ('outer')")
-            other_cxn.cursor().execute("INSERT INTO tmp_table VALUES ('inner')")
+            insert_row(other_cxn, 'inner')
             outer_txn.rollback()
 
-    cur = cxn.cursor()
-    cur.execute('SELECT * FROM tmp_table')
-    rows = cur.fetchall()
-    assert set(rows) == {('inner',)}
+    assert_rows(cxn, {'inner'})
 
 
 @pytest.mark.skip()
 def test_transaction_already_in_progress_asserts_on_enter(cxn):
     cxn.autocommit = False
-    cxn.cursor().execute("INSERT INTO tmp_table VALUES ('hello')")
+    insert_row('value')
     with pytest.raises(AssertionError, message='cxn is already in a transaction; Set cxn.autocommit = True'):
         Transaction(cxn).__enter__()
 
@@ -214,7 +172,7 @@ def cxn(db):
     with _connect(db) as cxn:
         with cxn.cursor() as cur:
             cur.execute("DROP TABLE IF EXISTS tmp_table")
-            cur.execute("CREATE TABLE tmp_table(Id VARCHAR(80))")
+            cur.execute("CREATE TABLE tmp_table(Id VARCHAR(80) PRIMARY KEY)")
 
     with _connect(db) as cxn:
         yield cxn
@@ -241,12 +199,18 @@ def _assert_connection_is_clean(cxn):
     # assert cxn.autocommit
 
 
-def assert_rows(cxn, *expected):
+def insert_row(cxn, value):
+    with cxn.cursor() as cur:
+        cur.execute("INSERT INTO tmp_table VALUES (%s)", (value,))
+
+
+def assert_rows(cxn, expected):
+    assert_not_in_transaction(cxn)
     with cxn:
         with cxn.cursor() as cur:
             cur.execute('SELECT * FROM tmp_table')
             rows = cur.fetchall()
-            assert set(v for (v,) in rows) == set(expected)
+            assert set(v for (v,) in rows) == expected
 
 
 def assert_in_transaction(cxn):
