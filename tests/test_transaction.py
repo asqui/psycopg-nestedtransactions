@@ -1,25 +1,65 @@
 import psycopg2
 import pytest
 import testing.postgresql
-from psycopg2.extensions import STATUS_READY, STATUS_IN_TRANSACTION, TRANSACTION_STATUS_IDLE
+from psycopg2.extensions import STATUS_READY, STATUS_IN_TRANSACTION, TRANSACTION_STATUS_IDLE, TRANSACTION_STATUS_INTRANS
 
 from nestedtransactions.transaction import Transaction
 
 
-def test_no_open_transactions_on_successful_exit(cxn):
+def test_no_open_transaction_on_successful_exit(cxn):
     assert_not_in_transaction(cxn)
     with Transaction(cxn):
         assert_in_transaction(cxn)
     assert_not_in_transaction(cxn)
 
 
-def test_no_open_transactions_on_exception(cxn):
+def test_no_open_transaction_on_exception(cxn):
     assert_not_in_transaction(cxn)
     with pytest.raises(ExpectedException):
         with Transaction(cxn):
             assert_in_transaction(cxn)
             raise ExpectedException('This rolls back the transaction')
     assert_not_in_transaction(cxn)
+
+
+def test_autocommit_on_successful_exit(cxn):
+    assert cxn.autocommit is True, 'Pre-condition'
+    assert_not_in_transaction(cxn)
+    with Transaction(cxn):
+        assert_in_transaction(cxn)
+    assert_not_in_transaction(cxn)
+    assert cxn.autocommit is True
+
+
+def test_autocommit_on_exception(cxn):
+    assert cxn.autocommit is True, 'Pre-condition'
+    assert_not_in_transaction(cxn)
+    with pytest.raises(ExpectedException):
+        with Transaction(cxn):
+            assert_in_transaction(cxn)
+            raise ExpectedException('This rolls back the transaction')
+    assert_not_in_transaction(cxn)
+    assert cxn.autocommit is True
+
+
+def test_autocommit_off_successful_exit(cxn):
+    cxn.autocommit = False
+    assert_not_in_transaction(cxn)
+    with Transaction(cxn):
+        assert_in_transaction(cxn)
+    assert_not_in_transaction(cxn)
+    assert cxn.autocommit is False
+
+
+def test_autocommit_off_exception(cxn):
+    cxn.autocommit = False
+    assert_not_in_transaction(cxn)
+    with pytest.raises(ExpectedException):
+        with Transaction(cxn):
+            assert_in_transaction(cxn)
+            raise ExpectedException('This rolls back the transaction')
+    assert_not_in_transaction(cxn)
+    assert cxn.autocommit is False
 
 
 def test_changes_applied_on_successful_exit(cxn):
@@ -178,37 +218,29 @@ def cxn(db):
     """Prepare a test table and return a connection."""
     with _connect(db) as cxn:
         with cxn.cursor() as cur:
-            cur.execute("DROP TABLE IF EXISTS tmp_table")
-            cur.execute("CREATE TABLE tmp_table(Id VARCHAR(80) PRIMARY KEY)")
+            cur.execute('DROP TABLE IF EXISTS tmp_table')
+            cur.execute('CREATE TABLE tmp_table(Id VARCHAR(80) PRIMARY KEY)')
 
     with _connect(db) as cxn:
         yield cxn
-        #_assert_connection_is_clean(cxn)
 
 
 @pytest.fixture()
 def other_cxn(db):
     with _connect(db) as cxn:
         yield cxn
-        #_assert_connection_is_clean(cxn)
 
 
 def _connect(db):
     cxn = psycopg2.connect(**db.dsn())
-    # cxn.autocommit = True
-    _assert_connection_is_clean(cxn)
+    cxn.autocommit = True
+    assert_not_in_transaction(cxn)
     return cxn
-
-
-def _assert_connection_is_clean(cxn):
-    assert cxn.status == STATUS_READY
-    assert cxn.get_transaction_status() == TRANSACTION_STATUS_IDLE
-    # assert cxn.autocommit
 
 
 def insert_row(cxn, value):
     with cxn.cursor() as cur:
-        cur.execute("INSERT INTO tmp_table VALUES (%s)", (value,))
+        cur.execute('INSERT INTO tmp_table VALUES (%s)', (value,))
 
 
 def assert_rows(cxn, expected):
@@ -222,10 +254,12 @@ def assert_rows(cxn, expected):
 
 def assert_in_transaction(cxn):
     assert cxn.status == STATUS_IN_TRANSACTION
+    assert cxn.get_transaction_status() == TRANSACTION_STATUS_INTRANS
 
 
 def assert_not_in_transaction(cxn):
     assert cxn.status == STATUS_READY
+    assert cxn.get_transaction_status() == TRANSACTION_STATUS_IDLE
 
 
 class ExpectedException(Exception):

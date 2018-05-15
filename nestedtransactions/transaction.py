@@ -12,9 +12,13 @@ class Transaction(object):
     def __init__(self, cxn):
         self.cxn = cxn
         self._rolled_back = False
+        self._original_autocommit = None
 
     def __enter__(self):
-        assert self.cxn.autocommit is False
+        self._original_autocommit = self.cxn.autocommit
+        if self.cxn.autocommit:
+            self.cxn.autocommit = False
+
         self._savepoint_id = 'savepoint_{}'.format(len(self._transaction_stack))
         self._transaction_stack.append(self)
         self.cxn.cursor().execute('SAVEPOINT ' + self._savepoint_id)
@@ -32,6 +36,9 @@ class Transaction(object):
             if len(self._transaction_stack) == 0:
                 del self.__transaction_stack[self.cxn]
                 self.cxn.commit()
+
+            if self.cxn.autocommit != self._original_autocommit:
+                self.cxn.autocommit = self._original_autocommit
         except:
             if exc_type:
                 _log.error('Exception raised when trying to exit Transaction context. '
