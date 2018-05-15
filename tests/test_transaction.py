@@ -62,6 +62,29 @@ def test_autocommit_off_exception(cxn):
     assert cxn.autocommit is False
 
 
+def test_autocommit_off_transaction_in_progress_successful_exit_leaves_outer_transaction_running(cxn):
+    cxn.autocommit = False
+    insert_row(cxn, 'prior')
+    assert_in_transaction(cxn)
+    with Transaction(cxn):
+        insert_row(cxn, 'new')
+    assert_in_transaction(cxn)
+    assert cxn.autocommit is False
+
+
+def test_autocommit_off_transaction_in_progress_exception_leaves_outer_transaction_running(cxn):
+    cxn.autocommit = False
+    insert_row(cxn, 'prior')
+    assert_in_transaction(cxn)
+    with pytest.raises(ExpectedException):
+        with Transaction(cxn):
+            insert_row(cxn, 'new')
+            raise ExpectedException('This rolls back just the inner transaction')
+    assert_in_transaction(cxn)
+    assert_rows(cxn, {'prior'}, still_in_transaction=True)
+    assert cxn.autocommit is False
+
+
 def test_changes_applied_on_successful_exit(cxn):
     with Transaction(cxn):
         insert_row(cxn, 'value')
@@ -95,7 +118,7 @@ def test_forced_discard_changes_discarded_on_exception(cxn):
     with pytest.raises(ExpectedException):
         with Transaction(cxn, force_disard=True):
             insert_row(cxn, 'value')
-            raise ExpectedException('The insert should be discarded here regardless of any exceptions thrown')
+            raise ExpectedException()
     assert_rows(cxn, set())
 
 
@@ -189,10 +212,11 @@ def test_explicit_rollback_outer_discards_inner_and_outer_changes(cxn):
     assert_rows(cxn, set())
 
 
-def test_rollback_outer_transaction_while_inner_transaction_is_active(cxn):
+def test_rollback_outer_transaction_while_inner_transaction_is_active_not_allowed(cxn):
     with Transaction(cxn) as outer:
         with Transaction(cxn):
-            with pytest.raises(Exception, match='Cannot rollback outer transaction from nested transaction context.'):
+            with pytest.raises(Exception, match='Cannot rollback outer transaction '
+                                                'from nested transaction context.'):
                 outer.rollback()
 
 
@@ -210,7 +234,8 @@ def test_transactions_on_multiple_connections_are_independent(cxn, other_cxn):
 def test_transaction_already_in_progress_asserts_on_enter(cxn):
     cxn.autocommit = False
     insert_row('value')
-    with pytest.raises(AssertionError, message='cxn is already in a transaction; Set cxn.autocommit = True'):
+    with pytest.raises(AssertionError,
+                       message='cxn is already in a transaction; Set cxn.autocommit = True'):
         Transaction(cxn).__enter__()
 
 
@@ -252,8 +277,9 @@ def insert_row(cxn, value):
         cur.execute('INSERT INTO tmp_table VALUES (%s)', (value,))
 
 
-def assert_rows(cxn, expected):
-    assert_not_in_transaction(cxn)
+def assert_rows(cxn, expected, still_in_transaction=False):
+    if not still_in_transaction:
+        assert_not_in_transaction(cxn)
     with cxn:
         with cxn.cursor() as cur:
             cur.execute('SELECT * FROM tmp_table')
