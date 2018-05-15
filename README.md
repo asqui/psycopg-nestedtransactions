@@ -88,25 +88,40 @@ directly, like this:
 Development
 -----------
 
-1. Install Postgres: See www.postgresql.org
-1. Make `initdb` available in your PATH.  
-   (The postgres testing.postgresql library needs `initdb` to be available in your PATH, 
-   otherwise you will get a `RuntimeError: command not found: initdb`).
-    * On Windows, add the Postgres bin/ directory to your PATH 
-      (e.g. `C:/Program Files/PostgreSQL/10/bin`)
-    * On Linux or MacOS, you can either:
-      * Add the Postgres bin/ directory to your PATH 
-        (e.g. `/usr/lib/postgresql/9.6/bin` on Linux
-         or `/Library/PostgreSQL/10/bin` on MacOS)
-      * Or, add a symlink to `initd` in `/usr/bin`:
-      
-            sudo ln -s /usr/lib/postgresql/9.6/bin/initdb /usr/bin/initdb
-1. Create a Virtual Environment
-1. Install dependencies
+1.  Install Postgres (See www.postgresql.org)
+1.  Create a Virtual Environment:
 
-       $ bin/pip install -U -e .[test,build]
+        $ python3 -m venv psycopg-nestedtransactions
+        $ cd psycopg-nestedtransactions
 
-1. Run the tests. They should all pass.
+1.  Make `initdb` available in your PATH.
+    (The postgres `testing.postgresql` library needs `initdb` to be available in your PATH,
+    otherwise you will get `RuntimeError: command not found: initdb` errors).
+
+    The appropriate path will likely be:
+    *   On MacOS: `/Library/PostgreSQL/10/bin`
+    *   On Linux: `/usr/lib/postgresql/10/bin`
+    *   On Windows: `C:/Program Files/PostgreSQL/10/bin`
+
+    Your options include:
+    *   Add it to your system PATH (as appropriate for your operating system)
+    *   Add it to your your venv `activate` script, with something along these lines:
+
+            # Add postgres to PATH
+            PATH="/Library/PostgreSQL/10/bin:${PATH}"
+            export PATH
+
+    * Add a symlink to `initd` in `/usr/bin`:
+
+          sudo ln -s /usr/lib/postgresql/9.6/bin/initdb /usr/bin/initdb
+
+1.  Activate the virtual env and install dependencies
+
+        $ source bin/activate
+        $ cd /path/to/source/root
+        $ bin/pip install -U -e .[test,build]
+
+1.  Run the tests. They should all pass.
 
        $ pytest
 
