@@ -95,7 +95,8 @@ def test_autocommit_off_exception(cxn):
     assert cxn.autocommit is False
 
 
-def test_autocommit_off_transaction_in_progress_successful_exit_leaves_outer_transaction_running(cxn):
+def test_autocommit_off_transaction_in_progress_successful_exit_leaves_transaction_running(cxn,
+                                                                                           other_cxn):
     cxn.autocommit = False
     insert_row(cxn, 'prior')
     assert_in_transaction(cxn)
@@ -103,9 +104,11 @@ def test_autocommit_off_transaction_in_progress_successful_exit_leaves_outer_tra
         insert_row(cxn, 'new')
     assert_in_transaction(cxn)
     assert cxn.autocommit is False
+    assert_rows(other_cxn, set())  # Nothing committed; changes not visible on another connection
 
 
-def test_autocommit_off_transaction_in_progress_exception_leaves_outer_transaction_running(cxn):
+def test_autocommit_off_transaction_in_progress_exception_leaves_transaction_running(cxn,
+                                                                                     other_cxn):
     cxn.autocommit = False
     insert_row(cxn, 'prior')
     assert_in_transaction(cxn)
@@ -114,22 +117,25 @@ def test_autocommit_off_transaction_in_progress_exception_leaves_outer_transacti
             insert_row(cxn, 'new')
             raise ExpectedException('This rolls back just the inner transaction')
     assert_in_transaction(cxn)
-    assert_rows(cxn, {'prior'}, still_in_transaction=True)
     assert cxn.autocommit is False
+    assert_rows(cxn, {'prior'}, still_in_transaction=True)
+    assert_rows(other_cxn, set())  # Nothing committed; changes not visible on another connection
 
 
-def test_changes_applied_on_successful_exit(cxn):
+def test_changes_applied_on_successful_exit(cxn, other_cxn):
     with Transaction(cxn):
         insert_row(cxn, 'value')
     assert_rows(cxn, {'value'})
+    assert_rows(other_cxn, {'value'})
 
 
-def test_changes_discarded_on_exception(cxn):
+def test_changes_discarded_on_exception(cxn, other_cxn):
     with pytest.raises(ExpectedException):
         with Transaction(cxn):
             insert_row(cxn, 'value')
             raise ExpectedException('This discards the insert')
     assert_rows(cxn, set())
+    assert_rows(other_cxn, set())
 
 
 def test_transaction_stack_dict_does_not_leak(cxn):
@@ -140,31 +146,34 @@ def test_transaction_stack_dict_does_not_leak(cxn):
 
 
 @pytest.mark.skip
-def test_forced_discard_changes_discarded_on_successful_exit(cxn):
+def test_forced_discard_changes_discarded_on_successful_exit(cxn, other_cxn):
     with Transaction(cxn, force_disard = True):
         insert_row(cxn, 'value')
     assert_rows(cxn, set())
+    assert_rows(other_cxn, set())
 
 
 @pytest.mark.skip
-def test_forced_discard_changes_discarded_on_exception(cxn):
+def test_forced_discard_changes_discarded_on_exception(cxn, other_cxn):
     with pytest.raises(ExpectedException):
         with Transaction(cxn, force_disard=True):
             insert_row(cxn, 'value')
             raise ExpectedException()
     assert_rows(cxn, set())
+    assert_rows(other_cxn, set())
 
 
-def test_inner_and_outer_changes_persisted_on_successful_exit(cxn):
+def test_inner_and_outer_changes_persisted_on_successful_exit(cxn, other_cxn):
     with Transaction(cxn):
         insert_row(cxn, 'outer-before')
         with Transaction(cxn):
             insert_row(cxn, 'inner')
         insert_row(cxn, 'outer-after')
     assert_rows(cxn, {'outer-before', 'inner', 'outer-after'})
+    assert_rows(other_cxn, {'outer-before', 'inner', 'outer-after'})
 
 
-def test_inner_and_outer_changes_discarded_on_outer_exception(cxn):
+def test_inner_and_outer_changes_discarded_on_outer_exception(cxn, other_cxn):
     with pytest.raises(ExpectedException):
         with Transaction(cxn):
             insert_row(cxn, 'outer')
@@ -172,9 +181,10 @@ def test_inner_and_outer_changes_discarded_on_outer_exception(cxn):
                 insert_row(cxn, 'inner')
             raise ExpectedException()
     assert_rows(cxn, set())
+    assert_rows(other_cxn, set())
 
 
-def test_inner_and_outer_changes_discarded_on_unhandled_inner_exception(cxn):
+def test_inner_and_outer_changes_discarded_on_unhandled_inner_exception(cxn, other_cxn):
     with pytest.raises(ExpectedException):
         with Transaction(cxn):
             insert_row(cxn, 'outer')
@@ -182,9 +192,11 @@ def test_inner_and_outer_changes_discarded_on_unhandled_inner_exception(cxn):
                 insert_row(cxn, 'inner')
                 raise ExpectedException()
     assert_rows(cxn, set())
+    assert_rows(other_cxn, set())
 
 
-def test_inner_changes_discarded_on_exception_but_outer_changes_persisted_on_successful_exit(cxn):
+def test_inner_changes_discarded_on_exception_but_outer_changes_persisted_on_successful_exit(cxn,
+                                                                                             other_cxn):
     with Transaction(cxn):
         insert_row(cxn, 'outer-before')
         with pytest.raises(ExpectedException):
@@ -193,6 +205,7 @@ def test_inner_changes_discarded_on_exception_but_outer_changes_persisted_on_suc
                 raise ExpectedException()
         insert_row(cxn, 'outer-after')
     assert_rows(cxn, {'outer-before', 'outer-after'})
+    assert_rows(other_cxn, {'outer-before', 'outer-after'})
 
 
 def test_explicit_rollback_outside_context_raises(cxn):
@@ -202,7 +215,7 @@ def test_explicit_rollback_outside_context_raises(cxn):
         txn.rollback()
 
 
-def test_explicit_rollback_inner_discards_only_inner_changes(cxn):
+def test_explicit_rollback_inner_discards_only_inner_changes(cxn, other_cxn):
     with Transaction(cxn):
         insert_row(cxn, 'outer-before')
         with Transaction(cxn) as inner:
@@ -210,22 +223,25 @@ def test_explicit_rollback_inner_discards_only_inner_changes(cxn):
             inner.rollback()
         insert_row(cxn, 'outer-after')
     assert_rows(cxn, {'outer-before', 'outer-after'})
+    assert_rows(other_cxn, {'outer-before', 'outer-after'})
 
 
-def test_explicit_rollback_discards_changes(cxn):
+def test_explicit_rollback_discards_changes(cxn, other_cxn):
     with Transaction(cxn) as txn:
         insert_row(cxn, 'value')
         txn.rollback()
     assert_rows(cxn, set())
+    assert_rows(other_cxn, set())
 
 
-def test_explicit_rollback_followed_by_exception_inside_context(cxn):
+def test_explicit_rollback_followed_by_exception_inside_context(cxn, other_cxn):
     with pytest.raises(ExpectedException):
         with Transaction(cxn) as txn:
             insert_row(cxn, 'value')
             txn.rollback()
             raise ExpectedException()
     assert_rows(cxn, set())
+    assert_rows(other_cxn, set())
 
 
 def test_explicit_rollback_repeated_raises(cxn):
@@ -236,13 +252,14 @@ def test_explicit_rollback_repeated_raises(cxn):
             txn.rollback()
 
 
-def test_explicit_rollback_outer_discards_inner_and_outer_changes(cxn):
+def test_explicit_rollback_outer_discards_inner_and_outer_changes(cxn, other_cxn):
     with Transaction(cxn) as outer:
         insert_row(cxn, 'outer')
         with Transaction(cxn):
             insert_row(cxn, 'inner')
         outer.rollback()
     assert_rows(cxn, set())
+    assert_rows(other_cxn, set())
 
 
 def test_rollback_outer_transaction_while_inner_transaction_is_active_not_allowed(cxn):
@@ -259,17 +276,9 @@ def test_transactions_on_multiple_connections_are_independent(cxn, other_cxn):
         with Transaction(other_cxn):
             insert_row(other_cxn, 'inner')
             outer_txn.rollback()
+            assert_rows(other_cxn, {'inner'}, still_in_transaction=True)
 
     assert_rows(cxn, {'inner'})
-
-
-@pytest.mark.skip()
-def test_transaction_already_in_progress_asserts_on_enter(cxn):
-    cxn.autocommit = False
-    insert_row('value')
-    with pytest.raises(AssertionError,
-                       message='cxn is already in a transaction; Set cxn.autocommit = True'):
-        Transaction(cxn).__enter__()
 
 
 def insert_row(cxn, value):
