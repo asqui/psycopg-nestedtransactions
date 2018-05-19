@@ -6,6 +6,39 @@ from psycopg2.extensions import STATUS_READY, STATUS_IN_TRANSACTION, TRANSACTION
 from nestedtransactions.transaction import Transaction
 
 
+@pytest.fixture(scope='module')
+def db():
+    with testing.postgresql.Postgresql() as db:
+        yield db
+
+
+@pytest.fixture(autouse=True)
+def create_tmp_table(db):
+    with _connect(db) as cxn:
+        with cxn.cursor() as cur:
+            cur.execute('DROP TABLE IF EXISTS tmp_table')
+            cur.execute('CREATE TABLE tmp_table(Id VARCHAR(80) PRIMARY KEY)')
+
+
+@pytest.fixture()
+def cxn(db):
+    with _connect(db) as cxn:
+        yield cxn
+
+
+@pytest.fixture()
+def other_cxn(db):
+    with _connect(db) as cxn:
+        yield cxn
+
+
+def _connect(db):
+    cxn = psycopg2.connect(**db.dsn())
+    cxn.autocommit = True
+    assert_not_in_transaction(cxn)
+    return cxn
+
+
 def test_no_open_transaction_on_successful_exit(cxn):
     assert_not_in_transaction(cxn)
     with Transaction(cxn):
@@ -237,40 +270,6 @@ def test_transaction_already_in_progress_asserts_on_enter(cxn):
     with pytest.raises(AssertionError,
                        message='cxn is already in a transaction; Set cxn.autocommit = True'):
         Transaction(cxn).__enter__()
-
-
-# --- Fixtures and helpers ---
-@pytest.fixture(scope='module')
-def db():
-    with testing.postgresql.Postgresql() as db:
-        yield db
-
-
-@pytest.fixture(autouse=True)
-def create_tmp_table(db):
-    with _connect(db) as cxn:
-        with cxn.cursor() as cur:
-            cur.execute('DROP TABLE IF EXISTS tmp_table')
-            cur.execute('CREATE TABLE tmp_table(Id VARCHAR(80) PRIMARY KEY)')
-
-
-@pytest.fixture()
-def cxn(db):
-    with _connect(db) as cxn:
-        yield cxn
-
-
-@pytest.fixture()
-def other_cxn(db):
-    with _connect(db) as cxn:
-        yield cxn
-
-
-def _connect(db):
-    cxn = psycopg2.connect(**db.dsn())
-    cxn.autocommit = True
-    assert_not_in_transaction(cxn)
-    return cxn
 
 
 def insert_row(cxn, value):
