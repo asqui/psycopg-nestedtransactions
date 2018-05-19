@@ -278,13 +278,15 @@ def insert_row(cxn, value):
 
 
 def assert_rows(cxn, expected, still_in_transaction=False):
-    if not still_in_transaction:
+    if still_in_transaction:
+        assert_in_transaction(cxn)
+    else:
         assert_not_in_transaction(cxn)
-    with cxn:
-        with cxn.cursor() as cur:
-            cur.execute('SELECT * FROM tmp_table')
-            rows = cur.fetchall()
-            assert set(v for (v,) in rows) == expected
+
+    with cxn.cursor() as cur:
+        cur.execute('SELECT * FROM tmp_table')
+        rows = cur.fetchall()
+        assert set(v for (v,) in rows) == expected
 
 
 def assert_in_transaction(cxn):
