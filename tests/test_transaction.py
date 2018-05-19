@@ -242,19 +242,20 @@ def test_transaction_already_in_progress_asserts_on_enter(cxn):
 # --- Fixtures and helpers ---
 @pytest.fixture(scope='module')
 def db():
-    """Create a fresh database and prepare a test table."""
     with testing.postgresql.Postgresql() as db:
         yield db
 
 
-@pytest.fixture()
-def cxn(db):
-    """Prepare a test table and return a connection."""
+@pytest.fixture(autouse=True)
+def create_tmp_table(db):
     with _connect(db) as cxn:
         with cxn.cursor() as cur:
             cur.execute('DROP TABLE IF EXISTS tmp_table')
             cur.execute('CREATE TABLE tmp_table(Id VARCHAR(80) PRIMARY KEY)')
 
+
+@pytest.fixture()
+def cxn(db):
     with _connect(db) as cxn:
         yield cxn
 
