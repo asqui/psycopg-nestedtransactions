@@ -4,17 +4,15 @@ psycopg-nestedtransactions
 [![Build Status](https://travis-ci.org/asqui/psycopg-nestedtransactions.svg?branch=master)](https://travis-ci.org/asqui/psycopg-nestedtransactions)
 
 Database transaction manager for psycopg2 database connections with seamless support for nested transactions.
- 
-Most commonly used as a context manager, but can also be used directly in special circumstances.
- 
-Use like this:
+
+Use it like this:
  
     with Transaction(cxn):
        # do stuff
  
     # Transaction is automatically committed if the block succeeds,
     # and rolled back if an exception is raised out of the block.
- 
+
 Transaction nesting is also supported:
  
     with Transaction(cxn):
@@ -25,7 +23,7 @@ This is useful for code composability, for example, if the inner transaction
 is actually contained within library code.
  
     updateWidget(cxn, ...):
-        # Make atomic changes to a widget across three different tables
+        """Make atomic changes to a widget across three different tables"""
         with Transaction(cxn):
             cur = cxn.cursor()
             cur.execute(...)  # Update data in widget table
@@ -50,21 +48,24 @@ being the ultimate arbiter of whether the net changes are committed or rolled ba
                 # Handle the failure and continue processing other widgets
         # If something else raises here, all changes are rolled back; alternately,
         # if this block exits successfully, all changes are committed at this point (and not before).
- 
-You may also choose to rollback a transaction unconditionally, for example
-if you are running in dry-run mode:
+
+
+Commit and Rollback
+-------------------
+
+You may choose to rollback a transaction unconditionally, for example if
+you are running in dry-run mode:
  
     dry_run_mode = True
     with Transaction(cxn, discard_changes=dry_run_mode) as txn:
         # Do stuff
     # Transaction is rolled back
     
-NB: You cannot explicitly commit or rollback a transaction without exiting the block.
+You cannot explicitly commit the transaction without exiting the block.
  
     with Transaction(cxn) as txn:
         txn.commit()  # This does not work
-        txn.rollback()  # This does not work either
- 
+
 Just exit the block without raising to commit. For example:
  
     with Transaction(cxn):
@@ -73,16 +74,91 @@ Just exit the block without raising to commit. For example:
         except:
             # Handle the failure
     # Transaction is committed
- 
-In special cases where you cannot use a context manager (e.g. in test code where you want to begin
-the transaction in `setUp()` and roll it back in `tearDown()`) you can use the `Transaction`
-directly, like this:
- 
-    def setUp():
-        self.txn = Transaction(cxn)  # Transaction begins here
- 
-    self tearDown():
-        self.txn.rollback()  # All test changes are rolled back
+
+In addition to the `discard_changes` mode, it is also possible to
+conditionally rollback inside the block without having to raise:
+
+    with Transaction(cxn) as txn:
+        updates = updateWidgets()
+        if tooManyUpdates(updates):
+            txn.rollback()
+            log.warn('Too many updates. Changes rolled-back!')
+
+Note that calling `rollback()` ends your transaction scope immediately.
+Any further updates executed after the call to `rollback()` will be
+executed outside the scope of this transaction (even if they are still
+within the context manager):
+
+    with Transaction(cxn) as txn:
+        txn.rollback()
+        # Updates made here are equivalent to...
+    # ...updates made here.
+
+
+Composability with classic transaction management
+-------------------------------------------------
+
+When introducing the `Transaction` context manager to an existing code
+base which uses classic transaction management techniques, the
+`Transaction` must be introduced in the innermost levels of code first.
+
+For example, this works as desired:
+
+    updateWidget(cxn, ...):
+        """Make atomic changes to a widget across three different tables"""
+        with Transaction(cxn):
+            cur = cxn.cursor()
+            cur.execute(...)  # Update data in widget table
+            cur.execute(...)  # Update data in widget_id table
+            cur.execute(...)  # Update data in widget_market_data table
+
+    cxn = connect()
+    cxn.autocommit = False
+    try:
+        updateWidget(cxn, ...)  # Update widget A
+        updateWidget(cxn, ...)  # Update widget B
+    except:
+        cxn.rollback()
+        raise
+    else:
+        cxn.commit()
+    finally:
+        cxn.close()
+
+
+Note that it is **not** possible to introduce the `Transaction` context
+manager at the outermost levels, surrounding code that uses classic
+transaction management techniques.
+
+For example, this will not work:
+
+    updateWidget(cxn, ...):
+        """This method uses classic transaction management techniques."""
+        cxn.autocommit = False
+        cur = cxn.cursor()
+        try:
+            cur.execute(...)  # Update data in widget table
+            cur.execute(...)  # Update data in widget_id table
+            cur.execute(...)  # Update data in widget_market_data table
+        except:
+            cxn.rollback()
+            raise
+        else:
+            cxn.commit()
+
+    cxn = connect()
+    with Transaction(cxn):
+        updateWidget(cxn, ...)  # Update widget A
+        updateWidget(cxn, ...)  # Update widget B
+
+Note that in this example, the first call to `updateWidget()` will
+result in an explicit call to `commit()` or `rollback()` on the
+underlying connection. This will not interact correctly with the
+containing `Transaction` context.
+
+Where possible, the `commit()` and `rollback()` methods are patched
+to raise an exception for the duration of the `Transaction` context, to
+help trap errors like this.
 
 
 Development
