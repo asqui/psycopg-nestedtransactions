@@ -104,6 +104,7 @@ def test_autocommit_off_transaction_in_progress_successful_exit_leaves_transacti
         insert_row(cxn, 'new')
     assert_in_transaction(cxn)
     assert cxn.autocommit is False
+    assert_rows(cxn, {'prior', 'new'}, still_in_transaction=True)
     assert_rows(other_cxn, set())  # Nothing committed; changes not visible on another connection
 
 
