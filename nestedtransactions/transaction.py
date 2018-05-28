@@ -10,8 +10,9 @@ _log.setLevel(logging.WARN)
 class Transaction(object):
     __transaction_stack = defaultdict(list)  # cxn -> [active_transaction_contexts]
 
-    def __init__(self, cxn):
+    def __init__(self, cxn, force_discard=False):
         self.cxn = cxn
+        self._force_discard = force_discard
         self._rolled_back = False
         self._original_autocommit = None
         self._outer_transaction = None
@@ -35,9 +36,11 @@ class Transaction(object):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        exception_raised = exc_type is not None
         try:
-            if exc_type is not None and not self._rolled_back:
-                self.rollback()
+            if self._force_discard or exception_raised:
+                if not self._rolled_back:
+                    self.rollback()
             elif not self._rolled_back:
                 self._commit()
 

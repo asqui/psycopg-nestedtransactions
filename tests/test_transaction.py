@@ -146,20 +146,26 @@ def test_transaction_stack_dict_does_not_leak(cxn):
     assert len(Transaction._Transaction__transaction_stack) == 0, 'Post-condition'
 
 
-@pytest.mark.skip
 def test_forced_discard_changes_discarded_on_successful_exit(cxn, other_cxn):
-    with Transaction(cxn, force_disard = True):
+    with Transaction(cxn, force_discard=True):
         insert_row(cxn, 'value')
     assert_rows(cxn, set())
     assert_rows(other_cxn, set())
 
 
-@pytest.mark.skip
 def test_forced_discard_changes_discarded_on_exception(cxn, other_cxn):
     with pytest.raises(ExpectedException):
-        with Transaction(cxn, force_disard=True):
+        with Transaction(cxn, force_discard=True):
             insert_row(cxn, 'value')
             raise ExpectedException()
+    assert_rows(cxn, set())
+    assert_rows(other_cxn, set())
+
+
+def test_forced_discard_explicit_rollback_followed_by_successful_exit(cxn, other_cxn):
+    with Transaction(cxn, force_discard=True) as txn:
+        insert_row(cxn, 'value')
+        txn.rollback()
     assert_rows(cxn, set())
     assert_rows(other_cxn, set())
 
