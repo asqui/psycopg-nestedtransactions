@@ -288,6 +288,15 @@ def test_transactions_on_multiple_connections_are_independent(cxn, other_cxn):
     assert_rows(cxn, {'inner'})
 
 
+def test_manual_enter_and_exit_out_of_order_exit_raises_assertion(cxn):
+    t1, t2 = Transaction(cxn), Transaction(cxn)
+    t1.__enter__()
+    t2.__enter__()
+    with pytest.raises(AssertionError, match='Out-of-order Transaction context exits. Are you '
+                                             'calling __exit__\(\) manually and getting it wrong?'):
+        t1.__exit__(None, None, None)
+
+
 def insert_row(cxn, value):
     with cxn.cursor() as cur:
         cur.execute('INSERT INTO tmp_table VALUES (%s)', (value,))

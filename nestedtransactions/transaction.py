@@ -15,14 +15,14 @@ class Transaction(object):
         self._force_discard = force_discard
         self._rolled_back = False
         self._original_autocommit = None
-        self._outer_transaction = None
+        self._containing_txn = None
 
     def __enter__(self):
         if len(self._transaction_stack) == 0:
             _log.info('Creating new outer transaction for {!r}'.format(self.cxn))
 
-            self._outer_transaction = (self.cxn.get_transaction_status() == TRANSACTION_STATUS_INTRANS)
-            if not self._outer_transaction:
+            self._containing_txn = (self.cxn.get_transaction_status() == TRANSACTION_STATUS_INTRANS)
+            if not self._containing_txn:
                 _log.info('%r: BEGIN', self.cxn)
 
         self._original_autocommit = self.cxn.autocommit
@@ -44,11 +44,13 @@ class Transaction(object):
             elif not self._rolled_back:
                 self._commit()
 
-            assert self._transaction_stack.pop() == self
+            assert self._transaction_stack.pop() == self, ('Out-of-order Transaction context '
+                                                           'exits. Are you calling __exit__() '
+                                                           'manually and getting it wrong?')
 
             if len(self._transaction_stack) == 0:
                 del self.__transaction_stack[self.cxn]
-                if not self._outer_transaction:
+                if not self._containing_txn:
                     _log.info('%r: COMMIT', self.cxn)
                     self.cxn.commit()
 
