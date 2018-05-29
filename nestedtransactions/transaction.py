@@ -47,7 +47,7 @@ class Transaction(object):
             elif not self._rolled_back:
                 self._commit()
 
-            assert self._transaction_stack.pop() == self, ('Out-of-order Transaction context '
+            assert self._transaction_stack.pop() is self, ('Out-of-order Transaction context '
                                                            'exits. Are you calling __exit__() '
                                                            'manually and getting it wrong?')
 
