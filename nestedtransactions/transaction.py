@@ -15,6 +15,7 @@ class Transaction(object):
         self._force_discard = force_discard
         self._rolled_back = False
         self._original_autocommit = None
+        self._patched_originals = None
         self._containing_txn = None
 
     def __enter__(self):
@@ -24,6 +25,8 @@ class Transaction(object):
             self._containing_txn = (self.cxn.get_transaction_status() == TRANSACTION_STATUS_INTRANS)
             if not self._containing_txn:
                 _log.info('%r: BEGIN', self.cxn)
+
+            self._try_patch(self.cxn)
 
         self._original_autocommit = self.cxn.autocommit
         if self.cxn.autocommit:
@@ -49,6 +52,7 @@ class Transaction(object):
                                                            'manually and getting it wrong?')
 
             if len(self._transaction_stack) == 0:
+                self._restore_patches(self.cxn)
                 del self.__transaction_stack[self.cxn]
                 if not self._containing_txn:
                     _log.info('%r: COMMIT', self.cxn)
@@ -78,6 +82,32 @@ class Transaction(object):
     @property
     def _transaction_stack(self):
         return self.__transaction_stack[self.cxn]
+
+    def _try_patch(self, cxn):
+        """
+        Try to patch `cxn` methods to assert helpfully when called in the Transaction context.
+
+        NB: This is not possible if `cxn` is coming from an extension module (e.g. a pure
+        pycopg2.extensions.connection instance), but it is possible if `cxn` is a Python subclass.
+        """
+        original_commit, original_rollback = cxn.commit, cxn.rollback
+
+        def new_commit():
+            raise Exception('Explicit commit() forbidden within a Transaction context.')
+
+        def new_rollback():
+            raise Exception('Explicit rollback() forbidden within a Transaction context.')
+
+        try:
+            cxn.commit, cxn.rollback = new_commit, new_rollback
+        except AttributeError:
+            pass  # Patching failed
+        else:
+            self._patched_originals = original_commit, original_rollback
+
+    def _restore_patches(self, cxn):
+        if self._patched_originals is not None:
+            cxn.commit, cxn.rollback = self._patched_originals
 
 
 def _execute_and_log(cxn, sql):

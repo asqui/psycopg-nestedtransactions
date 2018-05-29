@@ -32,8 +32,18 @@ def other_cxn(db):
         yield cxn
 
 
-def _connect(db):
-    cxn = psycopg2.connect(**db.dsn())
+@pytest.fixture()
+def python_cxn(db):
+    with _connect(db, connection_factory=PythonConnection) as cxn:
+        yield cxn
+
+
+class PythonConnection(psycopg2.extensions.connection):
+    pass
+
+
+def _connect(db, connection_factory=None):
+    cxn = psycopg2.connect(connection_factory=connection_factory, **db.dsn())
     cxn.autocommit = True
     assert_not_in_transaction(cxn)
     return cxn
@@ -275,6 +285,57 @@ def test_rollback_outer_transaction_while_inner_transaction_is_active_not_allowe
             with pytest.raises(Exception, match='Cannot rollback outer transaction '
                                                 'from nested transaction context.'):
                 outer.rollback()
+
+
+def test_manual_transaction_management_inside_context_interferes_with_transaction(cxn, other_cxn):
+    def classic_method(cxn):
+        assert cxn.autocommit is False
+        insert_row(cxn, 'inner')
+        cxn.commit()
+
+    txn = Transaction(cxn).__enter__()
+    insert_row(cxn, 'outer')
+    classic_method(cxn)
+    # All changes are committed and visible immediately :-(
+    assert_rows(other_cxn, {'inner', 'outer'})
+
+    # Context exit fails :-((
+    with pytest.raises(psycopg2.InternalError, match='no such savepoint'):
+        txn.__exit__(None, None, None)
+
+
+def test_manual_transaction_management_inside_context_autocommit_raises(cxn, python_cxn):
+    def classic_method(cxn, autocommit):
+        cxn.autocommit = autocommit  # Setting autocommit always raises
+        insert_row(cxn, 'inner')
+        cxn.commit()
+
+    for i, cxn in enumerate((cxn, python_cxn)):
+        for autocommit in (True, False):
+            with Transaction(cxn):
+                with pytest.raises(psycopg2.ProgrammingError,
+                                   match='set_session cannot be used inside a transaction'):
+                    classic_method(cxn, autocommit)
+
+
+def test_manual_transaction_management_with_connection_subclass_commit_rollback_raises(python_cxn,
+                                                                                       other_cxn):
+    def classic_method(python_cxn, commit):
+        if commit:
+            python_cxn.commit()
+        else:
+            python_cxn.rollback()
+
+    with Transaction(python_cxn):
+        with pytest.raises(Exception,
+                           match='Explicit commit\(\) forbidden within a Transaction context\.'):
+            classic_method(python_cxn, commit=True)
+        with pytest.raises(Exception,
+                           match='Explicit rollback\(\) forbidden within a Transaction context\.'):
+            classic_method(python_cxn, commit=False)
+
+    assert_rows(python_cxn, set())
+    assert_rows(other_cxn, set())
 
 
 def test_transactions_on_multiple_connections_are_independent(cxn, other_cxn):
