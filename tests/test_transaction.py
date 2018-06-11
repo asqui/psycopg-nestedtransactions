@@ -358,6 +358,29 @@ def test_manual_enter_and_exit_out_of_order_exit_raises_assertion(cxn):
         t1.__exit__(None, None, None)
 
 
+def test_context_manager_is_reusable(cxn):
+    txn = Transaction(cxn)
+    assert_not_in_transaction(cxn)
+    with txn:
+        assert_in_transaction(cxn)
+    assert_not_in_transaction(cxn)
+    with txn:
+        assert_in_transaction(cxn)
+    assert_not_in_transaction(cxn)
+
+
+def test_context_manager_is_not_reentrant(cxn):
+    # As the context manager stores state on self, calling __enter__() a second time overwrites it
+    txn = Transaction(cxn)
+    assert_not_in_transaction(cxn)
+    with txn:
+        assert_in_transaction(cxn)
+        with txn:  # Don't do this!
+            assert_in_transaction(cxn)
+        assert_in_transaction(cxn)
+    assert_not_in_transaction(cxn)
+
+
 def insert_row(cxn, value):
     with cxn.cursor() as cur:
         cur.execute('INSERT INTO tmp_table VALUES (%s)', (value,))

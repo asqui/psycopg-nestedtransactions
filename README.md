@@ -161,6 +161,33 @@ to raise an exception for the duration of the `Transaction` context, to
 help trap errors like this.
 
 
+Reusability and Reentrancy
+--------------------------
+The `Transaction` context manager is reusable. For example, you can do
+this:
+
+    txn = Transaction(cxn)
+    with txn:
+        # do stuff
+    with txn:
+        # do more stuff
+
+This seems pointless in such a simple example, but there are other cases
+where reusability may be helpful.
+
+The `Transaction` context manager is *not* reentrant. This is not
+supported and will not work:
+
+    txn = Transaction(cxn)
+    with txn:
+        # do stuff
+        with txn:  # Don't do this; it will not work!
+            pass
+
+(If you have a use case for reentrancy, raise an issue and we can
+implement support for it!)
+
+
 Development
 -----------
 
