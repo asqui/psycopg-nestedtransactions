@@ -1,6 +1,7 @@
 import psycopg2
 import pytest
 import testing.postgresql
+from psycopg2 import InternalError
 from psycopg2.extensions import STATUS_READY, STATUS_IN_TRANSACTION, TRANSACTION_STATUS_IDLE, TRANSACTION_STATUS_INTRANS
 
 from nestedtransactions.transaction import Transaction
@@ -369,6 +370,7 @@ def test_context_manager_is_reusable(cxn):
     assert_not_in_transaction(cxn)
 
 
+@pytest.mark.xfail(raises=InternalError)
 def test_context_manager_is_not_reentrant(cxn):
     # As the context manager stores state on self, calling __enter__() a second time overwrites it
     txn = Transaction(cxn)
