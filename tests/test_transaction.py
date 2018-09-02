@@ -303,9 +303,10 @@ def test_explicit_rollback_required_after_handling_sql_exception_otherwise_excep
     txn.__enter__()
     with pytest.raises(psycopg2.ProgrammingError):
         cxn.cursor().execute('SELECT * FROM this_table_does_not_exist')
-    with pytest.raises(psycopg2.InternalError,
-                       match='current transaction is aborted, commands ignored until end of '
-                             'transaction block'):
+    with pytest.raises(Exception,
+                       match=re.escape('SQL error occurred within current transaction. '
+                                       'Transaction.rollback() must be called before exiting '
+                                       'transaction context.')):
         txn.__exit__(None, None, None)
 
 

@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict
 
-from psycopg2.extensions import TRANSACTION_STATUS_INTRANS
+from psycopg2.extensions import TRANSACTION_STATUS_INTRANS, TRANSACTION_STATUS_INERROR
 
 _log = logging.getLogger(__name__)
 _log.setLevel(logging.WARN)
@@ -67,6 +67,9 @@ class Transaction(object):
             raise
 
     def _commit(self):
+        if self.cxn.get_transaction_status() == TRANSACTION_STATUS_INERROR:
+            raise Exception('SQL error occurred within current transaction. Transaction.rollback() '
+                            'must be called before exiting transaction context.')
         _execute_and_log(self.cxn, 'RELEASE SAVEPOINT ' + self._savepoint_id)
 
     def rollback(self):
