@@ -282,12 +282,31 @@ def test_explicit_rollback_outer_discards_inner_and_outer_changes(cxn, other_cxn
     assert_rows(other_cxn, set())
 
 
-def test_rollback_outer_transaction_while_inner_transaction_is_active_not_allowed(cxn):
+def test_explicit_rollback_of_outer_transaction_while_inner_transaction_is_active_not_allowed(cxn):
     with Transaction(cxn) as outer:
         with Transaction(cxn):
             with pytest.raises(Exception, match=re.escape('Cannot rollback outer transaction from '
                                                           'nested transaction context.')):
                 outer.rollback()
+
+
+def test_explicit_rollback_required_after_handling_sql_exception(cxn):
+    with Transaction(cxn) as txn:
+        try:
+            cxn.cursor().execute('SELECT * FROM this_table_does_not_exist')
+        except psycopg2.ProgrammingError:
+            txn.rollback()
+
+
+def test_explicit_rollback_required_after_handling_sql_exception_otherwise_exception_is_raised(cxn):
+    txn = Transaction(cxn)
+    txn.__enter__()
+    with pytest.raises(psycopg2.ProgrammingError):
+        cxn.cursor().execute('SELECT * FROM this_table_does_not_exist')
+    with pytest.raises(psycopg2.InternalError,
+                       match='current transaction is aborted, commands ignored until end of '
+                             'transaction block'):
+        txn.__exit__(None, None, None)
 
 
 def test_manual_transaction_management_inside_context_interferes_with_transaction(cxn, other_cxn):
