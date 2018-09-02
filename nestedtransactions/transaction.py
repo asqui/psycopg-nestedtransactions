@@ -93,10 +93,14 @@ class Transaction(object):
         original_commit, original_rollback = cxn.commit, cxn.rollback
 
         def new_commit():
-            raise Exception('Explicit commit() forbidden within a Transaction context.')
+            raise Exception('Explicit commit() forbidden within a Transaction context. '
+                            '(Transaction will be automatically committed on successful exit from '
+                            'context.)')
 
         def new_rollback():
-            raise Exception('Explicit rollback() forbidden within a Transaction context.')
+            raise Exception('Explicit rollback() forbidden within a Transaction context. '
+                            '(Either call Transaction.rollback() or allow an exception to '
+                            'propogate out of the context.)')
 
         try:
             cxn.commit, cxn.rollback = new_commit, new_rollback

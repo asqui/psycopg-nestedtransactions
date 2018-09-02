@@ -332,11 +332,13 @@ def test_manual_transaction_management_with_connection_subclass_commit_rollback_
     with Transaction(python_cxn):
         with pytest.raises(Exception,
                            match=re.escape('Explicit commit() forbidden within a Transaction '
-                                           'context.')):
+                                           'context. (Transaction will be automatically committed '
+                                           'on successful exit from context.)')):
             classic_method(python_cxn, commit=True)
         with pytest.raises(Exception,
                            match=re.escape('Explicit rollback() forbidden within a Transaction '
-                                           'context.')):
+                                           'context. (Either call Transaction.rollback() or allow '
+                                           'an exception to propogate out of the context.)')):
             classic_method(python_cxn, commit=False)
 
     assert_rows(python_cxn, set())
