@@ -69,7 +69,8 @@ class Transaction(object):
     def _commit(self):
         if self.cxn.get_transaction_status() == TRANSACTION_STATUS_INERROR:
             raise Exception('SQL error occurred within current transaction. Transaction.rollback() '
-                            'must be called before exiting transaction context.')
+                            'must be called before exiting transaction context. (Did you mean to '
+                            'place your try/except outside the Transaction context?)')
         _execute_and_log(self.cxn, 'RELEASE SAVEPOINT ' + self._savepoint_id)
 
     def rollback(self):
