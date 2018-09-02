@@ -1,3 +1,5 @@
+import re
+
 import psycopg2
 import pytest
 import testing.postgresql
@@ -266,7 +268,7 @@ def test_explicit_rollback_repeated_raises(cxn):
     with Transaction(cxn) as txn:
         insert_row(cxn, 'value')
         txn.rollback()
-        with pytest.raises(Exception, match='Transaction already rolled back.'):
+        with pytest.raises(Exception, match=re.escape('Transaction already rolled back.')):
             txn.rollback()
 
 
@@ -283,8 +285,8 @@ def test_explicit_rollback_outer_discards_inner_and_outer_changes(cxn, other_cxn
 def test_rollback_outer_transaction_while_inner_transaction_is_active_not_allowed(cxn):
     with Transaction(cxn) as outer:
         with Transaction(cxn):
-            with pytest.raises(Exception, match='Cannot rollback outer transaction '
-                                                'from nested transaction context.'):
+            with pytest.raises(Exception, match=re.escape('Cannot rollback outer transaction from '
+                                                          'nested transaction context.')):
                 outer.rollback()
 
 
@@ -329,10 +331,12 @@ def test_manual_transaction_management_with_connection_subclass_commit_rollback_
 
     with Transaction(python_cxn):
         with pytest.raises(Exception,
-                           match='Explicit commit\(\) forbidden within a Transaction context\.'):
+                           match=re.escape('Explicit commit() forbidden within a Transaction '
+                                           'context.')):
             classic_method(python_cxn, commit=True)
         with pytest.raises(Exception,
-                           match='Explicit rollback\(\) forbidden within a Transaction context\.'):
+                           match=re.escape('Explicit rollback() forbidden within a Transaction '
+                                           'context.')):
             classic_method(python_cxn, commit=False)
 
     assert_rows(python_cxn, set())
@@ -354,8 +358,9 @@ def test_manual_enter_and_exit_out_of_order_exit_raises_assertion(cxn):
     t1, t2 = Transaction(cxn), Transaction(cxn)
     t1.__enter__()
     t2.__enter__()
-    with pytest.raises(AssertionError, match='Out-of-order Transaction context exits. Are you '
-                                             'calling __exit__\(\) manually and getting it wrong?'):
+    with pytest.raises(AssertionError,
+                       match=re.escape('Out-of-order Transaction context exits. Are you calling '
+                                       '__exit__() manually and getting it wrong?')):
         t1.__exit__(None, None, None)
 
 
