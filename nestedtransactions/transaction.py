@@ -8,9 +8,29 @@ _log.setLevel(logging.WARN)
 
 
 class Transaction(object):
+    """
+    Database transaction manager for psycopg2 database connections with seamless support for nested transactions.
+
+    Basic usage:
+        with Transaction(cxn):
+        # do stuff
+
+        # Transaction is automatically committed if the block succeeds,
+        # and rolled back if an exception is raised out of the block.
+
+    Transaction nesting is also supported:
+        with Transaction(cxn):
+            with Transaction(cxn):
+                # do stuff
+    """
     __transaction_stack = defaultdict(list)  # cxn -> [active_transaction_contexts]
 
     def __init__(self, cxn, force_discard=False):
+        """
+        :param cxn: An open psycopg2 database connection.
+        :param force_discard: If True, rollback changes even if the Transaction block exits
+                              successfully.
+        """
         self.cxn = cxn
         self._force_discard = force_discard
         self._rolled_back = False
@@ -74,6 +94,12 @@ class Transaction(object):
         _execute_and_log(self.cxn, 'RELEASE SAVEPOINT ' + self._savepoint_id)
 
     def rollback(self):
+        """
+        Discard changes made within this transaction and end the transaction immediately.
+
+        This should typically be the last statement within the context manager as any further
+        updates executed after this call will be executed outside the transaction.
+        """
         if self not in self._transaction_stack:
             raise Exception('Cannot rollback outside transaction context.')
         if self._transaction_stack[-1] is not self:

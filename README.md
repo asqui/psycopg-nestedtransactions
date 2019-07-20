@@ -57,7 +57,7 @@ You may choose to rollback a transaction unconditionally, for example if
 you are running in dry-run mode:
  
     dry_run_mode = True
-    with Transaction(cxn, discard_changes=dry_run_mode) as txn:
+    with Transaction(cxn, force_discard=dry_run_mode) as txn:
         # Do stuff
     # Transaction is rolled back
     
@@ -75,7 +75,7 @@ Just exit the block without raising to commit. For example:
             # Handle the failure
     # Transaction is committed
 
-In addition to the `discard_changes` mode, it is also possible to
+In addition to the `force_discard` mode, it is also possible to
 conditionally rollback inside the block without having to raise:
 
     with Transaction(cxn) as txn:
@@ -156,9 +156,9 @@ result in an explicit call to `commit()` or `rollback()` on the
 underlying connection. This will not interact correctly with the
 containing `Transaction` context.
 
-Where possible, the `commit()` and `rollback()` methods are patched
-to raise an exception for the duration of the `Transaction` context, to
-help trap errors like this.
+Where possible, the `commit()` and `rollback()` methods are patched to
+raise an exception for the duration of the `Transaction` context, to
+help trap errors such as this.
 
 
 Reusability and Reentrancy
