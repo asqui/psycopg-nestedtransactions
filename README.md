@@ -222,7 +222,7 @@ Development
 
         $ source bin/activate
         $ cd /path/to/source/root
-        $ bin/pip install -U -e .[test,build]
+        $ pip install -U -e .[test]
 
 1.  Run the tests. They should all pass.
 
