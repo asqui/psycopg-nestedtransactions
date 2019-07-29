@@ -108,6 +108,30 @@ def test_autocommit_off_exception(cxn):
     assert cxn.autocommit is False
 
 
+def test_autocommit_off_but_no_transaction_started_successful_exit_commits_changes(cxn, other_cxn):
+    cxn.autocommit = False
+    assert_not_in_transaction(cxn)
+    with Transaction(cxn):
+        insert_row(cxn, 'new')
+    assert_not_in_transaction(cxn)
+    assert cxn.autocommit is False
+    assert_rows(cxn, {'new'})
+    assert_rows(other_cxn, {'new'})  # Changes committed.
+
+
+def test_autocommit_off_but_no_transaction_started_exception_discards_changes(cxn, other_cxn):
+    cxn.autocommit = False
+    assert_not_in_transaction(cxn)
+    with pytest.raises(ExpectedException):
+        with Transaction(cxn):
+            insert_row(cxn, 'new')
+            raise ExpectedException('This rolls back just the inner transaction')
+    assert_not_in_transaction(cxn)
+    assert cxn.autocommit is False
+    assert_rows(cxn, set())
+    assert_rows(other_cxn, set())  # No changes committed.
+
+
 def test_autocommit_off_transaction_in_progress_successful_exit_leaves_transaction_running(cxn,
                                                                                            other_cxn):
     cxn.autocommit = False
