@@ -120,8 +120,6 @@ class Transaction(object):
         NB: This is not possible if `cxn` is coming from an extension module (e.g. a pure
         pycopg2.extensions.connection instance), but it is possible if `cxn` is a Python subclass.
         """
-        original_commit, original_rollback = cxn.commit, cxn.rollback
-
         def new_commit():
             raise Exception('Explicit commit() forbidden within a Transaction context. '
                             '(Transaction will be automatically committed on successful exit from '
@@ -133,6 +131,8 @@ class Transaction(object):
                             'propogate out of the context.)')
 
         try:
+            original_commit = cxn.__dict__.get('commit')
+            original_rollback = cxn.__dict__.get('rollback')
             cxn.commit, cxn.rollback = new_commit, new_rollback
         except AttributeError:
             pass  # Patching failed
@@ -140,8 +140,14 @@ class Transaction(object):
             self._patched_originals = original_commit, original_rollback
 
     def _restore_patches(self, cxn):
-        if self._patched_originals is not None:
-            cxn.commit, cxn.rollback = self._patched_originals
+        if self._patched_originals is None:
+            return
+
+        for original, name in zip(self._patched_originals, ('commit', 'rollback')):
+            if original is None:
+                del cxn.__dict__[name]
+            else:
+                setattr(cxn, name, original)
 
 
 def _execute_and_log(cxn, sql):

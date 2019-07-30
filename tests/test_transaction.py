@@ -389,6 +389,22 @@ def test_manual_transaction_management_with_connection_subclass_commit_rollback_
     assert_rows(other_cxn, set())
 
 
+def test_commit_and_rollback_unchanged_after_transaction_block(python_cxn):
+    # See: https://github.com/asqui/psycopg-nestedtransactions/issues/11
+    def check(cxn):
+        original_commit, original_rollback = cxn.commit, cxn.rollback
+        original_dict_keys = set(cxn.__dict__.keys())
+        with Transaction(cxn):
+            pass
+        assert (original_commit, original_rollback) == (cxn.commit, cxn.rollback)
+        assert original_dict_keys == set(cxn.__dict__.keys()), 'Instance dict has changed'
+
+    check(python_cxn)
+    python_cxn.commit = python_cxn.commit
+    python_cxn.rollback = python_cxn.rollback
+    check(python_cxn)
+
+
 def test_transactions_on_multiple_connections_are_independent(cxn, other_cxn):
     with Transaction(cxn) as outer_txn:
         insert_row(cxn, 'outer')
