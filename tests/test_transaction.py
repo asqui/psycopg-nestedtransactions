@@ -334,7 +334,7 @@ def test_explicit_rollback_required_after_handling_sql_exception_otherwise_excep
         txn.__exit__(None, None, None)
 
 
-def test_manual_transaction_management_inside_context_interferes_with_transaction(cxn, other_cxn):
+def test_manual_transaction_management_inside_context_explicit_commit(cxn, other_cxn):
     def classic_method(cxn):
         assert cxn.autocommit is False
         insert_row(cxn, 'inner')
@@ -349,6 +349,46 @@ def test_manual_transaction_management_inside_context_interferes_with_transactio
     # Context exit fails :-((
     with pytest.raises(psycopg2.InternalError, match='no such savepoint'):
         txn.__exit__(None, None, None)
+
+
+def test_manual_transaction_management_inside_context_explicit_rollback(cxn, other_cxn):
+    def classic_method(cxn):
+        assert cxn.autocommit is False
+        insert_row(cxn, 'inner')
+        cxn.rollback()
+
+    txn = Transaction(cxn).__enter__()
+    insert_row(cxn, 'outer')
+    assert_in_transaction(cxn)
+    classic_method(cxn)
+    assert_not_in_transaction(cxn)
+
+    # Context exit fails :-(
+    with pytest.raises(psycopg2.InternalError, match='no such savepoint'):
+        txn.__exit__(None, None, None)
+
+    # All changes are discarded :-((
+    assert_rows(other_cxn, set())
+
+
+def test_manual_transaction_management_inside_context_implicit_rollback(cxn, other_cxn):
+    def method(cxn):
+        # This method implicitly rolls back the current transaction :-(
+        # See: https://github.com/psycopg/psycopg2/issues/950
+        cxn.set_client_encoding('LATIN1')
+
+    txn = Transaction(cxn).__enter__()
+    insert_row(cxn, 'outer')
+    assert_in_transaction(cxn)
+    method(cxn)
+    assert_not_in_transaction(cxn)
+
+    # Context exit fails :-(
+    with pytest.raises(psycopg2.InternalError, match='no such savepoint'):
+        txn.__exit__(None, None, None)
+
+    # All changes are discarded :-((
+    assert_rows(other_cxn, set())
 
 
 def test_manual_transaction_management_inside_context_autocommit_raises(cxn, python_cxn):
@@ -437,7 +477,7 @@ def test_context_manager_is_reusable(cxn):
     assert_not_in_transaction(cxn)
 
 
-@pytest.mark.xfail(raises=InternalError)
+@pytest.mark.xfail(raises=InternalError)  # no such savepoint
 def test_context_manager_is_not_reentrant(cxn):
     # As the context manager stores state on self, calling __enter__() a second time overwrites it
     txn = Transaction(cxn)
