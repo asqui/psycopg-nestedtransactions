@@ -226,7 +226,7 @@ Development
 
 1.  Run the tests. They should all pass.
 
-       $ pytest
+        $ pytest
 
 
 Contributors
